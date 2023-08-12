@@ -1,0 +1,50 @@
+import re, settings
+import asyncio
+from threading import Thread
+from request_utils import check_if_meets_requirements
+
+
+# Credits to https://github.com/Were-Woof/Lobby-Stat-Check for the below code
+class checkPlayer(Thread):
+    def __init__(self, player) -> None:
+        super().__init__()
+        self.player = player
+        self.guildless = []
+        self.meets_requirements = []
+
+    def run(self) -> None:
+        guildless, meets_requirements = asyncio.run(check_if_meets_requirements(self.player))
+        if guildless:
+            self.guildless.append(self.player)
+        if meets_requirements:
+            self.meets_requirements.append(self.player)
+
+async def grabChat():
+    # Opening the logs file
+    players = None
+    with open(settings.PATH, 'r+b') as file:
+        for line_bytes in file.readlines():
+            line = str(line_bytes).split('[CHAT] ')[-1]  # Only message content
+            line = re.sub(r'\\[nrt]', '', line)  # Remove all escape characters
+
+            if line.startswith('Online Players'):
+                line = line.split(': ')[-1]  # Players only in message
+                players = line.split(', ')  # Split at comma and remove whitespace before name
+    if not players:
+        return None, None, None
+    # Initializing the threads
+    threads = [checkPlayer(player.split('] ')[-1]) for player in players]
+
+    # Starting all the threads
+    [t.start() for t in threads]
+
+    # waiting for the threads to complete
+    [t.join() for t in threads]
+
+    # Save the values
+    all = [player.split('] ')[-1] for player in players]
+    guildless = [t.guildless[0] if t.guildless else "" for t in threads]
+    meets_requirements = [t.meets_requirements[0] if t.meets_requirements else "" for t in threads]
+    print("Guildless", guildless)
+    print("Meets Reqs", meets_requirements)
+    return all, guildless, meets_requirements
